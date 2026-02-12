@@ -22,12 +22,12 @@ except ImportError:
 # 1. SYSTEM CONFIGURATION
 # ---------------------------------------------------------
 FIRM_NAME = "ATLAS PRIVATE WEALTH"
-SYSTEM_VERSION = "V47.5 REALITY CHECK (BETA STRESS + BUBBLE PENALTY)"
+SYSTEM_VERSION = "V48.3 CALIBRATED (SOFT LANDING LOGIC)"
 
 st.set_page_config(page_title=FIRM_NAME, layout="wide")
 
 # ---------------------------------------------------------
-# 2. DESIGN: "THE SOVEREIGN" (INSTITUTIONAL DARK)
+# 2. DESIGN: "THE SOVEREIGN"
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -57,12 +57,8 @@ st.markdown("""
     .sov-yellow { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); color: #fbbf24; }
     .sov-blue { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
     
-    /* DATA TABLES */
-    .aladdin-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-    .aladdin-table td { padding: 8px; border-bottom: 1px solid #27272a; color: #a1a1aa; }
-    .aladdin-table th { text-align: left; padding: 8px; border-bottom: 1px solid #52525b; color: #52525b; text-transform: uppercase; }
-    .risk-high { color: #ef4444; font-weight: bold; }
-    .risk-low { color: #10b981; font-weight: bold; }
+    /* ACADEMY BOX */
+    .academy-box { background-color: #0d1117; padding: 15px; border-left: 3px solid #58a6ff; border-radius: 4px; margin-top: 5px; font-size: 12px; color: #c9d1d9; border: 1px solid #30363d; }
 
     /* INPUTS & BUTTONS */
     .stTextInput>div>div>input { background-color: #000; color: #fff; border: 1px solid #333; }
@@ -77,7 +73,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 3. MATHEMATICAL ENGINES
+# 3. KNOWLEDGE BASE
+# ---------------------------------------------------------
+def academy_lookup(concept):
+    kb = {
+        "GMM REGIME": "AI model koji prepoznaje 'rezim' trzista. Ako je VIX izmedu 20 i 30, to je 'Povecan rizik' (zuto). Ako je iznad 30, to je 'Kriza' (crveno). Ispod 20 je 'Rast' (zeleno).",
+        "Z-SCORE BUBBLE": "Statisticka mjera. Ako je cijena 2x standardne devijacije iznad prosjeka, dionica je 'skupa'. Atlas tada smanjuje ulog da te zastiti od pada.",
+        "KALMAN FILTER": "Algoritam koji mice 'sum'. Zuta linija pokazuje pravi trend. Ako je cijena (svijece) daleko iznad zute linije, ocekuj povratak na prosjek (pad).",
+        "BETA STRESS": "Mjeri koliko tvoja dionica 'plese' s trzistem. Beta 2.0 znaci da ako trziste padne 10%, tvoja dionica pada 20%.",
+        "OPTION GREEKS": "Delta ti govori koliko ces zaraditi ako dionica naraste za $1. Gamma govori koliko ce se ta zarada ubrzati."
+    }
+    return kb.get(concept, "Definicija nije dostupna.")
+
+# ---------------------------------------------------------
+# 4. MATHEMATICAL ENGINES
 # ---------------------------------------------------------
 
 # --- A. MACRO PULSE ---
@@ -96,34 +105,49 @@ def get_macro_context():
         
         yield_spread = tnx - irx
         macro_state = "EXPANSION"; macro_mult = 1.0
+        
+        # Inversion Check
         if yield_spread < 0:
-            macro_state = "RECESSION WARNING"; macro_mult = 0.5 
+            macro_state = "RECESSION WARNING"
+            macro_mult = 0.5 
             
+        # VIX Logic (Calibrated)
         vix_status = "NORMAL"
-        if vix > 40.0: macro_state = "MARKET CRASH"; macro_mult = 0.0; vix_status = "CRASH"
-        elif vix > 25.0: vix_status = "ELEVATED"; macro_mult = min(macro_mult, 0.6)
+        if vix > 35.0: 
+            macro_state = "MARKET CRASH"
+            macro_mult = 0.0
+            vix_status = "CRASH"
+        elif vix > 25.0: 
+            vix_status = "ELEVATED"
+            macro_mult = min(macro_mult, 0.6)
+        elif vix > 18.0:
+            vix_status = "NERVOUS" # New status
+            # No hard penalty, just warning
             
         return {"state": macro_state, "multiplier": macro_mult, "spread": float(yield_spread), "vix": float(vix), "vix_status": vix_status}
     except: return {"state": "SOURCE_ERROR", "multiplier": 1.0, "spread": 0, "vix": 0, "vix_status": "ERR"}
 
-# --- B. GMM REGIME (ML) ---
+# --- B. GMM REGIME (ML - CALIBRATED) ---
 def get_market_regime_gmm():
-    if not SKLEARN_AVAILABLE: return "ML ENGINE OFFLINE", 1.0, "sov-blue"
+    if not SKLEARN_AVAILABLE: return "ML OFFLINE", 1.0, "sov-blue"
     try:
         data = yf.download(["^VIX", "SPY"], period="6mo", progress=False)['Close']
         data = data.ffill().bfill()
         
+        # Extract VIX
         if isinstance(data.columns, pd.MultiIndex): vix_val = data['^VIX'].iloc[-1]
         else: vix_val = data['^VIX'].iloc[-1]
 
-        if vix_val < 20.0: return "LOW VOLATILITY REGIME (GROWTH)", 1.0, "sov-green"
-
+        # 1. SANITY CHECK (The "Safety Valve")
+        if vix_val < 20.0:
+            return "LOW VOLATILITY (GROWTH)", 1.0, "sov-green"
+        
+        # 2. ML LOGIC (Only runs if VIX > 20)
         df = pd.DataFrame()
         df['VIX'] = data['^VIX'] if isinstance(data.columns, pd.MultiIndex) else data['^VIX']
         df['SPY_VOL'] = data['SPY'].pct_change().rolling(5).std() if isinstance(data.columns, pd.MultiIndex) else data['SPY'].pct_change().rolling(5).std()
         df = df.dropna()
-        if df.empty: return "DATA INSUFFICIENT", 1.0, "sov-blue"
-
+        
         X = df.values
         gmm = GaussianMixture(n_components=2, random_state=42)
         gmm.fit(X)
@@ -131,8 +155,17 @@ def get_market_regime_gmm():
         means = gmm.means_[:, 0]
         high_risk_state = np.argmax(means)
         
-        if current_state == high_risk_state: return "HIGH VOLATILITY REGIME (CRISIS)", 0.0, "sov-red"
-        else: return "LOW VOLATILITY REGIME (GROWTH)", 1.0, "sov-green"
+        # 3. SOFT LANDING LOGIC
+        if current_state == high_risk_state:
+            if vix_val < 30.0:
+                # Crisis detected by ML, but VIX is not extreme -> CAUTION MODE
+                return "ELEVATED RISK (CAUTION)", 0.5, "sov-yellow"
+            else:
+                # Real Crisis
+                return "HIGH VOLATILITY (CRISIS)", 0.0, "sov-red"
+        else:
+            return "LOW VOLATILITY (GROWTH)", 1.0, "sov-green"
+            
     except: return "REGIME DETECTION FAILED", 1.0, "sov-blue"
 
 # --- C. VOLATILITY CLUSTERING ---
@@ -157,46 +190,39 @@ def black_litterman_lite(expected_return_atlas, confidence=0.5):
         return bl_return, market_equilibrium
     except: return expected_return_atlas, 0.0
 
-# --- E. SCENARIO WAR ROOM (FIXED: BETA ADJUSTED) ---
+# --- E. SCENARIO WAR ROOM (BETA ADJUSTED) ---
 def run_scenario_stress(hist, current_price, position_value=10000):
-    """
-    Calculates Beta-adjusted stress scenarios. 
-    High Beta stocks will show larger losses than Low Beta stocks.
-    """
     try:
-        # 1. Calculate Beta vs SPY
+        # Fetch SPY for Beta calc
         spy = yf.download("SPY", period="1y", progress=False)['Close']
         if isinstance(spy, pd.DataFrame): spy = spy.iloc[:, 0]
-        spy_ret = spy.pct_change().dropna()
-        stock_ret = hist['Close'].pct_change().dropna()
         
-        # Align data
+        stock_ret = hist['Close'].pct_change().dropna()
+        spy_ret = spy.pct_change().dropna()
+        
+        # Align timestamps
         aligned_stock, aligned_spy = stock_ret.align(spy_ret, join='inner')
         
         if len(aligned_stock) > 30:
-            covariance = np.cov(aligned_stock, aligned_spy)[0][1]
-            variance = np.var(aligned_spy)
-            beta = covariance / variance
+            cov = np.cov(aligned_stock, aligned_spy)[0][1]
+            var = np.var(aligned_spy)
+            beta = cov / var
         else:
-            beta = 1.0 # Default if data missing
+            beta = 1.0
             
-        # Limit Beta to avoid absurd numbers (0.5 to 3.0 range)
-        beta = max(0.5, min(beta, 3.0))
-        
+        beta = max(0.5, min(beta, 3.0)) # Cap Beta
     except:
-        beta = 1.0 # Fallback
+        beta = 1.0 
 
-    # Base Market Shocks (What SPY would do)
     base_shocks = {
-        "OIL SHOCK ($150)": -0.15,       # Market drops 15%
-        "FED HAWKISH SURPRISE": -0.05,   # Market drops 5%
-        "FLASH CRASH (15 MIN)": -0.09,   # Market drops 9%
-        "RECESSION (HARD LANDING)": -0.25 # Market drops 25%
+        "OIL SHOCK ($150)": -0.15,
+        "FED HAWKISH SURPRISE": -0.05,
+        "FLASH CRASH (15 MIN)": -0.09,
+        "RECESSION (HARD LANDING)": -0.25
     }
     
     results = {}
     for name, mkt_drop in base_shocks.items():
-        # Adjust drop by stock's beta (Stock drop = Market drop * Beta)
         stock_drop = mkt_drop * beta
         results[name] = {
             "price": current_price * (1 + stock_drop), 
@@ -377,30 +403,29 @@ def get_full_analysis(ticker):
         
         # --- MODULES ---
         macro = get_macro_context()
-        gmm_name, gmm_mult, gmm_color = get_market_regime_gmm()
+        gmm_name, gmm_mult, gmm_color = get_market_regime_gmm() # FIXED LOGIC
         macro_sens, macro_risk = get_macro_matrix(ret)
         pc_ratio, gamma_state, gamma_mult = get_derivative_pressure(stock)
         sent_score, sent_label = get_news_sentiment(stock)
         liq_data = calc_liquidity_risk(hist, price)
-        vol_context = get_volatility_context(ret) # OMEGA
-        war_room = run_scenario_stress(hist, price, 10000) # OMEGA BETA FIX
+        vol_context = get_volatility_context(ret) 
+        war_room = run_scenario_stress(hist, price, 10000) 
         
         kalman = apply_kalman(hist['Close'].values)
         factors = get_factor_exposure(ret)
         
-        # --- ANTI-BUBBLE Z-SCORE CHECK (FIXING HIGH CONVICTION BIAS) ---
-        # 1. Calculate how far Price is from Kalman Trend
+        # --- ANTI-BUBBLE Z-SCORE CHECK ---
         residual = price - kalman[-1]
         resid_std = (hist['Close'] - kalman).std()
         z_resid = residual / resid_std if resid_std > 0 else 0
         
-        # 2. Bubble Penalty
+        # Bubble Penalty
         bubble_penalty = 1.0
-        if z_resid > 2.0: bubble_penalty = 0.5 # Overbought: Cut size in half
-        if z_resid > 3.0: bubble_penalty = 0.1 # Bubble: Kill trade
-        if z_resid < -2.0: bubble_penalty = 0.8 # Oversold: Caution
+        if z_resid > 2.0: bubble_penalty = 0.5 
+        if z_resid > 3.0: bubble_penalty = 0.1 
+        if z_resid < -2.0: bubble_penalty = 0.8 
         
-        # --- SOVEREIGN MULTIPLIER 3.1 ---
+        # --- SOVEREIGN MULTIPLIER 3.2 (SOFT LANDING) ---
         w_regime = 1.5; w_macro = 1.0; w_gamma = 0.5
         f_regime = gmm_mult if gmm_mult is not None else 1.0
         f_macro = 0.8 if macro_risk else 1.0
@@ -415,7 +440,6 @@ def get_full_analysis(ticker):
         
         if macro['multiplier'] == 0.0: f_regime = 0.0
         
-        # Multiply everything, including new Bubble Penalty
         sovereign_mult = (f_regime**w_regime) * (f_macro**w_macro) * (f_gamma**w_gamma) * f_sent * f_liq * f_garch * bubble_penalty * confidence_lambda
         
         mu = ret.mean()*252
@@ -425,14 +449,17 @@ def get_full_analysis(ticker):
         base_kelly = max(0, min(k_raw * 0.25, 0.50)) * 100
         final_size = base_kelly * sovereign_mult
         
-        # STRICTER VERDICTS
+        # VERDICT LOGIC (FIXED)
         verdict = "NEUTRAL"
         v_color = "sov-yellow"
         
         if sovereign_mult == 0.0: 
-            verdict = "HARD STOP (CRISIS/EXIT)"
+            verdict = "HARD STOP (CRISIS)"
             v_color = "sov-red"
-        elif final_size > 20.0 and z_resid < 1.5: # Only High Conviction if NOT overbought
+        elif gmm_mult == 0.5: # CAUTION MODE
+            verdict = "CAUTION (ELEVATED RISK)"
+            v_color = "sov-yellow"
+        elif final_size > 20.0 and z_resid < 1.5: 
             verdict = "HIGH CONVICTION BUY"
             v_color = "sov-green"
         elif final_size > 5.0: 
@@ -442,10 +469,10 @@ def get_full_analysis(ticker):
             verdict = "OVERBOUGHT (WAIT)"
             v_color = "sov-yellow"
         else: 
-            verdict = "WATCHLIST ONLY (RISK)"
+            verdict = "WATCHLIST ONLY"
             v_color = "sov-red"
         
-        # MC RESTORED
+        # MC
         dt = 1/252; sims = 300 
         paths = np.zeros((sims, 253)); paths[:, 0] = price
         for i in range(sims):
@@ -476,19 +503,31 @@ def get_full_analysis(ticker):
     except Exception as e: return None
 
 # ---------------------------------------------------------
-# 4. UI LAYOUT (FULL UI RESTORED)
+# 5. UI LAYOUT
 # ---------------------------------------------------------
 macro_data = get_macro_context()
 
-st.sidebar.markdown(f"### {FIRM_NAME}")
+# --- LOGO INSERTION (CRASH PROOF) ---
+logo_path = "Gemini_Generated_Image_owvs7wowvs7wowvs.jpg"
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
+else:
+    st.sidebar.markdown(f"## {FIRM_NAME}")
+
 st.sidebar.markdown(f"<div style='color:#666; font-size:10px; margin-bottom:15px;'>{SYSTEM_VERSION}</div>", unsafe_allow_html=True)
 st.sidebar.markdown("**GLOBAL MACRO PULSE**")
 
-m_col = "#3fb950" if macro_data['multiplier'] == 1.0 else "#da3633"
+m_col = "#3fb950" if macro_data['multiplier'] == 1.0 else ("#f59e0b" if macro_data['multiplier'] == 0.6 else "#da3633")
 st.sidebar.markdown(f"<div style='color:{m_col}; font-weight:bold; margin-bottom:10px;'>{macro_data['state']}</div>", unsafe_allow_html=True)
 st.sidebar.metric("YIELD SPREAD (10Y-13W)", f"{macro_data['spread']:.3f}%")
 st.sidebar.metric("VIX (FEAR INDEX)", f"{macro_data['vix']:.2f}", macro_data['vix_status'])
 st.sidebar.progress(float(macro_data['multiplier']))
+
+# --- ATLAS ACADEMY SIDEBAR ---
+with st.sidebar.expander("ATLAS ACADEMY"):
+    topic = st.selectbox("NAUCI O:", ["GMM REGIME", "Z-SCORE BUBBLE", "KALMAN FILTER", "BETA STRESS", "OPTION GREEKS"])
+    explanation = academy_lookup(topic)
+    st.markdown(f"<div class='academy-box'>{explanation}</div>", unsafe_allow_html=True)
 
 menu = st.sidebar.radio("MODULES", ["QUANTUM LAB", "ALADDIN PORTFOLIO", "CFD WAR ROOM", "TIME MACHINE", "DEAL MECHANICS", "COMPLIANCE"])
 
@@ -557,7 +596,7 @@ if menu == "QUANTUM LAB":
                 with c1:
                     st.markdown("<div class='ibkr-header'>POSITION SIZING</div>", unsafe_allow_html=True)
                     st.metric("FINAL SOVEREIGN SIZE", f"{data['size']['final']:.1f}%")
-                    st.caption(f"Includes Bubble Penalty (Z-Score)")
+                    st.caption(f"Based on Black-Litterman Return & Lambda Confidence")
                     st.metric("NEWS SENTIMENT", data['sentiment']['label'], f"{data['sentiment']['score']:.2f}")
                 with c2:
                     st.markdown("<div class='ibkr-header'>OPTION GREEKS</div>", unsafe_allow_html=True)
@@ -640,3 +679,4 @@ elif menu == "COMPLIANCE":
     st.markdown("## KYC REGISTRY")
     with st.form("kyc"):
         if st.form_submit_button("REGISTER ENTITY"): st.success("ENTITY REGISTERED")
+
